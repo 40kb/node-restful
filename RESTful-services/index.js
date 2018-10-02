@@ -1,6 +1,18 @@
 const express = require('express')
 const Joi = require('joi')
+const helmet = require('helmet')
+const morgan = require('morgan')
+const config = require('config')
+const startupDebugger = require('debug')('app:startup')
+const dbDebugger = require('debug')('app:db')
 const app = express()
+
+// ENV -- `process.env.NODE_ENV` variable (系统变量)
+// 实际项目中你需要不同的环境例如：production、development、staging
+// 如果没有设 process.env.NODE_ENV 这个变量，默认会是 development
+// 有两种方法可以拿到这个值：
+console.log(`NODE_ENV:  ${process.env.NODE_ENV}`)
+console.log(app.get('env'))
 
 // app.get() //  HTTP GET
 // app.post() // HTTP POST
@@ -9,8 +21,64 @@ const app = express()
 // SYNTAX app.get/post/put/delete('path/route', callback()/routeHandle)
 // docs: https://expressjs.com
 
-// adding middleware -- what is middleware?
+// buildin middleware -- what is middleware?
 app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+app.use(express.static('public'))
+
+// third-part middleware
+app.use(helmet())
+
+if (app.get('env') === 'development') {
+  app.use(morgan('tiny'))
+  console.log('Morgan enabled...')
+}
+
+// Configuration
+// 不要放敏感信息在这里, 你可以放在 evn variable "ex: export app_mailpassword=1234"
+// 然后在 config 里做一个 map:
+// {
+//    "name": "Express App",
+//    "mail": {
+//      "password": "app_mailpassword"
+//    }
+// }
+//
+// 改变一下 NODE_ENV 看看结果
+// `export NODE_ENV=production`, `export NODE_ENV=development`, `export NODE_ENV=staging`
+console.log('Application Name: ' + config.get('name'))
+console.log('Mail Server: ' + config.get('mail.host'))
+
+// DEBUGGER
+// 改变 `DEBUG` 环境变量来看一下结果
+// `export DEBUG=app:start`
+// `export DEBUG=app:db`
+// `export DEBUG=app:*` -- 打开所有 debugs
+//
+// 另外一种方式是，在启动之前指定 debug 类型，例如：
+// DEBUG=app:db nodemon index.js
+// DEBUG=app:startup npm start
+startupDebugger('message form debugger')
+dbDebugger('db message from debugger')
+
+// TEMPLATE ENGINE
+app.set('view engine', 'pug')
+app.set('views', './views') // default
+
+// custom middleware
+app.use(function(req, res, next) {
+  console.log('Logging...')
+  next() // next() -- 这个 fn 完了，你继续下一个middle, 这一行一定要写！！！ 要不然会一直卡主在这里
+})
+
+app.use(function(req, res, next) {
+  console.log('Authenticating...')
+  next()
+})
+
+// 把 custom middleware 写在单独的文件/Module
+const logger = require('./logger-middleware')
+app.use(logger)
 
 const courses = [
   {
@@ -33,6 +101,14 @@ const courses = [
 
 app.get('/', (req, res) => {
   res.send('Hello World!')
+})
+
+// sending HTML to Client
+app.get('/html', (req, res) => {
+  res.render('index', {
+    title: 'Express App',
+    message: 'Hello World',
+  })
 })
 
 app.get('/api/courses', (req, res) => {
